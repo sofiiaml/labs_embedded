@@ -1,0 +1,120 @@
+#include <Wire.h>
+#include <Adafruit_BMP280.h>
+
+#define BUTTON_PIN 18
+#define LED_TIMER 23
+#define LED_BUTTON 19
+
+Adafruit_BMP280 bmp;
+hw_timer_t *timer = NULL;
+
+volatile bool timerFlag = false;
+volatile bool buttonReleased = false;
+
+volatile unsigned long pressStartTime = 0;
+volatile unsigned long pressDuration = 0;
+
+unsigned long lastButtonInterrupt = 0;
+
+void IRAM_ATTR onTimer() {
+  timerFlag = true;
+}
+
+void IRAM_ATTR buttonISR() {
+  unsigned long currentTime = millis();
+
+  // антидребезг
+  if (currentTime - lastButtonInterrupt < 50) {
+    return;
+  }
+
+  lastButtonInterrupt = currentTime;
+
+  if (digitalRead(BUTTON_PIN) == LOW) {
+    // кнопку натиснули
+    pressStartTime = millis();
+  } else {
+    // кнопку відпустили
+    pressDuration = millis() - pressStartTime;
+    buttonReleased = true;
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(LED_TIMER, OUTPUT);
+  pinMode(LED_BUTTON, OUTPUT);
+
+  digitalWrite(LED_TIMER, LOW);
+  digitalWrite(LED_BUTTON, LOW);
+
+  // I2C для BMP280
+  Wire.begin(21, 22);
+
+  // Адреса BMP280 може бути 0x76 або 0x77
+  if (!bmp.begin(0x76)) {
+    Serial.println("BMP280 не знайдено на адресі 0x76. Спробуйте 0x77.");
+
+    if (!bmp.begin(0x77)) {
+      Serial.println("BMP280 не знайдено. Перевірте підключення!");
+      while (1);
+    }
+  }
+
+  Serial.println("BMP280 успішно підключено!");
+
+  attachInterrupt(
+    digitalPinToInterrupt(BUTTON_PIN),
+    buttonISR,
+    CHANGE
+  );
+
+  // Таймер з частотою 1 MHz
+  timer = timerBegin(1000000);
+
+  timerAttachInterrupt(timer, &onTimer);
+
+  // Переривання кожні 2 секунди
+  timerAlarm(timer, 2000000, true, 0);
+}
+
+void loop() {
+  if (timerFlag) {
+    timerFlag = false;
+
+    float temperature = bmp.readTemperature();
+    float pressure = bmp.readPressure() / 100.0;
+
+    Serial.print("Temperature: ");
+    Serial.print(temperature);
+    Serial.println(" C");
+
+    Serial.print("Pressure: ");
+    Serial.print(pressure);
+    Serial.println(" hPa");
+
+    digitalWrite(LED_TIMER, HIGH);
+    delay(200);
+    digitalWrite(LED_TIMER, LOW);
+
+    Serial.println("Timer interrupt finished, LED_TIMER blinked.");
+    Serial.println("----------------------------");
+  }
+
+  if (buttonReleased) {
+    buttonReleased = false;
+
+    Serial.print("Button hold duration: ");
+    Serial.print(pressDuration);
+    Serial.println(" ms");
+
+    digitalWrite(LED_BUTTON, HIGH);
+    delay(pressDuration);
+    digitalWrite(LED_BUTTON, LOW);
+
+    Serial.println("LED_BUTTON was ON for the same duration.");
+    Serial.println("----------------------------");
+  }
+}
