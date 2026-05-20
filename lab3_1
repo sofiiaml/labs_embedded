@@ -1,0 +1,75 @@
+#define BUTTON_PHOTO 18
+#define BUTTON_COUNT 19
+#define LED_PIN 23
+#define PHOTO_PIN 34
+
+volatile bool photoButtonReleased = false;
+volatile bool countButtonPressed = false;
+
+int pressCount = 0;
+bool ledState = false;
+
+unsigned long lastDebounce1 = 0;
+unsigned long lastDebounce2 = 0;
+
+void IRAM_ATTR photoInterrupt() {
+  if (millis() - lastDebounce1 > 200) {
+    photoButtonReleased = true;
+    lastDebounce1 = millis();
+  }
+}
+
+void IRAM_ATTR countInterrupt() {
+  if (millis() - lastDebounce2 > 200) {
+    countButtonPressed = true;
+    lastDebounce2 = millis();
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  pinMode(BUTTON_PHOTO, INPUT_PULLUP);
+  pinMode(BUTTON_COUNT, INPUT_PULLUP);
+  pinMode(LED_PIN, OUTPUT);
+
+  attachInterrupt(digitalPinToInterrupt(BUTTON_PHOTO), photoInterrupt, RISING);
+  attachInterrupt(digitalPinToInterrupt(BUTTON_COUNT), countInterrupt, FALLING);
+
+  analogReadResolution(12);
+}
+
+void loop() {
+  if (photoButtonReleased) {
+    photoButtonReleased = false;
+
+    int photoValue = analogRead(PHOTO_PIN);
+
+    Serial.print("Photoresistor ADC value: ");
+    Serial.println(photoValue);
+
+    digitalWrite(LED_PIN, HIGH);
+    delay(200);
+    digitalWrite(LED_PIN, LOW);
+  }
+
+  if (countButtonPressed) {
+    countButtonPressed = false;
+
+    pressCount++;
+    ledState = !ledState;
+
+    Serial.print("Button press count: ");
+    Serial.println(pressCount);
+
+    digitalWrite(LED_PIN, ledState);
+
+    int brightness = map(pressCount, 0, 20, 0, 255);
+    brightness = constrain(brightness, 0, 255);
+
+    analogWrite(LED_PIN, brightness);
+
+    Serial.print("LED brightness: ");
+    Serial.println(brightness);
+  }
+}
