@@ -1,0 +1,181 @@
+#include <Arduino.h>
+
+const int sizes[] = {50, 100, 500, 1000};
+const int cpuFreqs[] = {240, 160, 80, 40};
+
+struct TreeNode {
+  double value;
+  TreeNode* left;
+  TreeNode* right;
+};
+
+TreeNode* createNode(double value) {
+  TreeNode* node = new TreeNode;
+  node->value = value;
+  node->left = nullptr;
+  node->right = nullptr;
+  return node;
+}
+
+TreeNode* insertNode(TreeNode* root, double value) {
+  if (root == nullptr) {
+    return createNode(value);
+  }
+
+  if (value < root->value) {
+    root->left = insertNode(root->left, value);
+  } else {
+    root->right = insertNode(root->right, value);
+  }
+
+  return root;
+}
+
+void deleteTree(TreeNode* root) {
+  if (root == nullptr) return;
+  deleteTree(root->left);
+  deleteTree(root->right);
+  delete root;
+}
+
+template <typename T>
+void quickSort(T arr[], int left, int right) {
+  int i = left;
+  int j = right;
+  T pivot = arr[(left + right) / 2];
+
+  while (i <= j) {
+    while (arr[i] < pivot) i++;
+    while (arr[j] > pivot) j--;
+
+    if (i <= j) {
+      T temp = arr[i];
+      arr[i] = arr[j];
+      arr[j] = temp;
+      i++;
+      j--;
+    }
+  }
+
+  if (left < j) quickSort(arr, left, j);
+  if (i < right) quickSort(arr, i, right);
+}
+
+template <typename T>
+void generateArray(T arr[], int size) {
+  for (int i = 0; i < size; i++) {
+    arr[i] = random(0, 10000) / 10.0;
+  }
+}
+
+template <>
+void generateArray<int>(int arr[], int size) {
+  for (int i = 0; i < size; i++) {
+    arr[i] = random(0, 10000);
+  }
+}
+
+template <>
+void generateArray<char>(char arr[], int size) {
+  for (int i = 0; i < size; i++) {
+    arr[i] = random(33, 126);
+  }
+}
+
+template <typename T>
+void testQuickSort(const char* typeName, int size) {
+  T* arr = new T[size];
+
+  generateArray(arr, size);
+
+  uint32_t memoryBefore = ESP.getFreeHeap();
+  uint32_t startTime = micros();
+
+  quickSort(arr, 0, size - 1);
+
+  uint32_t endTime = micros();
+  uint32_t memoryAfter = ESP.getFreeHeap();
+
+  Serial.print("QuickSort;");
+  Serial.print(typeName);
+  Serial.print(";");
+  Serial.print(size);
+  Serial.print(";");
+  Serial.print(getCpuFrequencyMhz());
+  Serial.print("MHz;");
+  Serial.print(endTime - startTime);
+  Serial.print(" us;");
+  Serial.print(memoryBefore - memoryAfter);
+  Serial.println(" bytes");
+
+  delete[] arr;
+}
+
+template <typename T>
+void testBinaryTree(const char* typeName, int size) {
+  T* arr = new T[size];
+
+  generateArray(arr, size);
+
+  TreeNode* root = nullptr;
+
+  uint32_t memoryBefore = ESP.getFreeHeap();
+  uint32_t startTime = micros();
+
+  for (int i = 0; i < size; i++) {
+    root = insertNode(root, (double)arr[i]);
+  }
+
+  uint32_t endTime = micros();
+  uint32_t memoryAfter = ESP.getFreeHeap();
+
+  Serial.print("BinaryTree;");
+  Serial.print(typeName);
+  Serial.print(";");
+  Serial.print(size);
+  Serial.print(";");
+  Serial.print(getCpuFrequencyMhz());
+  Serial.print("MHz;");
+  Serial.print(endTime - startTime);
+  Serial.print(" us;");
+  Serial.print(memoryBefore - memoryAfter);
+  Serial.println(" bytes");
+
+  deleteTree(root);
+  delete[] arr;
+}
+
+void runTestsForSize(int size) {
+  testQuickSort<int>("int", size);
+  testQuickSort<float>("float", size);
+  testQuickSort<double>("double", size);
+  testQuickSort<char>("char", size);
+
+  testBinaryTree<int>("int", size);
+  testBinaryTree<float>("float", size);
+  testBinaryTree<double>("double", size);
+  testBinaryTree<char>("char", size);
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(2000);
+
+  randomSeed(analogRead(0));
+
+  Serial.println("Algorithm;Type;Size;CPU;Time;Memory");
+
+  for (int f = 0; f < 4; f++) {
+    setCpuFrequencyMhz(cpuFreqs[f]);
+    delay(500);
+
+    for (int s = 0; s < 4; s++) {
+      runTestsForSize(sizes[s]);
+    }
+  }
+
+  Serial.println("Testing finished.");
+}
+
+void loop() {
+}
