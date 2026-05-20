@@ -1,0 +1,126 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <SPIFFS.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+#include <Adafruit_BMP280.h>
+
+#define ONE_WIRE_BUS 4
+#define PHOTO_PIN 34
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature ds18b20(&oneWire);
+Adafruit_BMP280 bmp;
+
+File dataFile;
+
+int counter = 0;
+
+void writeFileHeader() {
+  File file = SPIFFS.open("/data.csv", FILE_WRITE);
+
+  if (!file) {
+    Serial.println("Failed to open file for writing");
+    return;
+  }
+
+  file.println("Number;Temperature_DS18B20;Temperature_BMP280;Pressure;Light");
+  file.close();
+}
+
+void appendData(float tempDS, float tempBMP, float pressure, int lightValue) {
+  File file = SPIFFS.open("/data.csv", FILE_APPEND);
+
+  if (!file) {
+    Serial.println("Failed to open file for appending");
+    return;
+  }
+
+  file.print(counter);
+  file.print(";");
+  file.print(tempDS);
+  file.print(";");
+  file.print(tempBMP);
+  file.print(";");
+  file.print(pressure);
+  file.print(";");
+  file.println(lightValue);
+
+  file.close();
+}
+
+void readFile() {
+  File file = SPIFFS.open("/data.csv", FILE_READ);
+
+  if (!file) {
+    Serial.println("Failed to open file for reading");
+    return;
+  }
+
+  Serial.println();
+  Serial.println("----- FILE CONTENT -----");
+
+  while (file.available()) {
+    Serial.write(file.read());
+  }
+
+  Serial.println("----- END FILE -----");
+
+  file.close();
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  ds18b20.begin();
+
+  if (!SPIFFS.begin(true)) {
+    Serial.println("SPIFFS Mount Failed");
+    return;
+  }
+
+  Serial.println("SPIFFS started");
+
+  if (!bmp.begin(0x76)) {
+    Serial.println("BMP280 not found at 0x76. Trying 0x77...");
+
+    if (!bmp.begin(0x77)) {
+      Serial.println("BMP280 not found. Check wiring.");
+      return;
+    }
+  }
+
+  Serial.println("BMP280 started");
+
+  writeFileHeader();
+
+  for (counter = 0; counter < 30; counter++) {
+    ds18b20.requestTemperatures();
+
+    float tempDS = ds18b20.getTempCByIndex(0);
+    float tempBMP = bmp.readTemperature();
+    float pressure = bmp.readPressure() / 100.0;
+    int lightValue = analogRead(PHOTO_PIN);
+
+    appendData(tempDS, tempBMP, pressure, lightValue);
+
+    Serial.print("Number: ");
+    Serial.print(counter);
+    Serial.print(" | DS18B20: ");
+    Serial.print(tempDS);
+    Serial.print(" C | BMP280 temp: ");
+    Serial.print(tempBMP);
+    Serial.print(" C | Pressure: ");
+    Serial.print(pressure);
+    Serial.print(" hPa | Light: ");
+    Serial.println(lightValue);
+
+    delay(1000);
+  }
+
+  readFile();
+}
+
+void loop() {
+}
